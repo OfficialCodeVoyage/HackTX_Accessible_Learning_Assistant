@@ -1,17 +1,16 @@
-# Import necessary libraries
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 import shutil
 import os
-import json
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 import uuid
 import easyocr
 from pdf2image import convert_from_path
 import numpy as np
+import json
 from typing import List, Dict
 from pydantic import BaseModel
+
 from langchain.docstore.document import Document
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings.openai import OpenAIEmbeddings
@@ -23,8 +22,14 @@ from langchain_iris import IRISVector
 # Load environment variables
 load_dotenv(override=True)
 
-# Initialize FastAPI and add CORS middleware
+# Initialize FastAPI
 app = FastAPI()
+
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI()
+
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],  # Adjust with your frontend URL
@@ -39,7 +44,7 @@ EXTRACTED_TEXT_DIR = "extracted_texts"
 COLLECTION_NAME = "document_store"
 IRIS_CONNECTION_STRING = os.getenv("CONNECTION_STRING")
 
-# Create directories for uploads and extracted texts
+# Create directories
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(EXTRACTED_TEXT_DIR, exist_ok=True)
 
@@ -55,7 +60,6 @@ llm = ChatOpenAI(
 vector_store = None
 
 def initialize_vector_store(docs):
-    """Initialize or update the global vector store."""
     global vector_store
     if vector_store is None:
         vector_store = IRISVector.from_documents(
@@ -68,7 +72,6 @@ def initialize_vector_store(docs):
         vector_store.add_documents(docs)
     return vector_store
 
-# Pydantic models for structured responses
 class QuestionAnswer(BaseModel):
     question: str
     answer: str
@@ -81,7 +84,6 @@ class MultipleChoiceQuestion(BaseModel):
 class MCQResponse(BaseModel):
     multiple_choice_questions: List[MultipleChoiceQuestion]
 
-# Endpoint to upload and process PDFs
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...), directory: str = ""):
     # Save uploaded file
@@ -93,14 +95,21 @@ async def upload_pdf(file: UploadFile = File(...), directory: str = ""):
     
     # Extract text from PDF
     pdf_reader = PdfReader(pdf_path)
-    extracted_text = [page.extract_text() for page in pdf_reader.pages if page.extract_text()]
+    extracted_text = []
+
+    for page in pdf_reader.pages:
+        text = page.extract_text()
+        if text:
+            extracted_text.append(text)
 
     # Use OCR if no text was extracted
     if not extracted_text:
         reader = easyocr.Reader(['en'])
         images = convert_from_path(pdf_path)
+        
         for image in images:
-            result = reader.readtext(np.array(image))
+            image_np = np.array(image)
+            result = reader.readtext(image_np)
             page_text = " ".join([text for (bbox, text, prob) in result])
             if page_text.strip():
                 extracted_text.append(page_text)
@@ -130,7 +139,6 @@ async def upload_pdf(file: UploadFile = File(...), directory: str = ""):
         "text_file": text_path
     }
 
-# Endpoint to query the documents in vector store
 @app.post("/query")
 async def query_document(query: str):
     if vector_store is None:
@@ -152,7 +160,6 @@ async def query_document(query: str):
         "sources": [{"content": doc.page_content, "score": score} for doc, score in docs_with_score]
     }
 
-# Endpoint to generate open-ended questions with answers
 @app.post("/qa")
 async def get_qa(query: str):
     if vector_store is None:
@@ -175,11 +182,10 @@ async def get_qa(query: str):
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Failed to parse questions output")
 
-# Helper function to generate multiple-choice questions
 def create_multiple_choice_questions(context: str, num_questions: int) -> List[MultipleChoiceQuestion]:
     prompt_template = PromptTemplate(
         input_variables=["context", "num_questions"],
-        template="""Create {num_questions} multiple-choice questions with 4 options each based on the following text. Format your response as a JSON list of questions:
+        template="""Create {num_questions} multiple-choice questions with 4 options each based on the following text. Give options in only one word. Format your response as a JSON list of questions:
 
         [
             {{
@@ -206,14 +212,19 @@ def create_multiple_choice_questions(context: str, num_questions: int) -> List[M
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Failed to parse MCQ output")
 
-# Endpoint to create multiple-choice questions
+def get_context(query: str) -> str:
+    if vector_store is None:
+        raise HTTPException(status_code=400, detail="No documents have been uploaded yet")
+    
+    docs_with_score = vector_store.similarity_search_with_score(query)
+    return "\n".join([doc.page_content for doc, _ in docs_with_score])
+
 @app.post("/mcq", response_model=MCQResponse)
 async def get_mcq(query: str = "create MCQs", num_questions: int = 1):
     context = get_context(query)
     mcqs = create_multiple_choice_questions(context, num_questions)
     return MCQResponse(multiple_choice_questions=mcqs)
 
-# Endpoint to summarize the document
 @app.get("/summary")
 async def summary_document():
     if vector_store is None:
