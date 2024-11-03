@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Azure AI Continuous Conversation</title>
+</head>
+<body>
+    <h1>Azure AI Continuous Conversation</h1>
+    <button id="toggleConversation">Start Conversation</button>
+    <audio id="responseAudio" controls></audio>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"
+            integrity="sha384-XTSLbr0c4SNF5jUgXwaPYroSRjD9X8EJ+j6+LUtsZG46FJilXlb+uHSh2Y9HkX9K"
+            crossorigin="anonymous"></script>
+    <script>
+        const toggleButton = document.getElementById('toggleConversation');
+        const responseAudio = document.getElementById('responseAudio');
+        let isConversing = false;
+        let mediaRecorder;
+        let socket;
+
+        toggleButton.addEventListener('click', async () => {
+            if (!isConversing) {
+                // Start Conversation
+                toggleButton.textContent = 'End Conversation';
+                isConversing = true;
+
+                // Initialize Socket.IO
+                socket = io('http://localhost:5000');
+
+                socket.on('connect', () => {
+                    console.log('Connected to backend');
+                });
+
+                socket.on('ai_audio', (data) => {
+                    // Play AI response
+                    const audioBlob = new Blob([data.audio], { type: 'audio/wav' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    responseAudio.src = audioUrl;
+                    responseAudio.play();
+                });
+
+                socket.on('error', (data) => {
+                    alert('Error: ' + data.message);
+                });
+
+                // Start recording audio
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.start();
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0 && socket.connected) {
+                        event.data.arrayBuffer().then(buffer => {
+                            socket.emit('user_audio', { audio: new Uint8Array(buffer) });
+                        });
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    console.log('MediaRecorder stopped');
+                };
+
+                // Automatically stop recording and start sending data periodically
+                mediaRecorder.onstart = () => {
+                    console.log('MediaRecorder started');
+                };
+
+                // Optionally, set intervals or use Speech Recognition APIs for better control
+            } else {
+                // End Conversation
+                toggleButton.textContent = 'Start Conversation';
+                isConversing = false;
+
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.stop();
+                }
+
+                if (socket) {
+                    socket.disconnect();
+                }
+            }
+        });
+    </script>
+</body>
+</html>

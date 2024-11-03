@@ -1,4 +1,6 @@
+# Import necessary libraries
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import shutil
 import os
 from dotenv import load_dotenv
@@ -10,7 +12,6 @@ import numpy as np
 import json
 from typing import List, Dict
 from pydantic import BaseModel
-
 from langchain.docstore.document import Document
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings.openai import OpenAIEmbeddings
@@ -27,9 +28,9 @@ app = FastAPI()
 
 from fastapi.middleware.cors import CORSMiddleware
 
+# Initialize FastAPI and add CORS middleware
 app = FastAPI()
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],  # Adjust with your frontend URL
@@ -44,7 +45,7 @@ EXTRACTED_TEXT_DIR = "extracted_texts"
 COLLECTION_NAME = "document_store"
 IRIS_CONNECTION_STRING = os.getenv("CONNECTION_STRING")
 
-# Create directories
+
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(EXTRACTED_TEXT_DIR, exist_ok=True)
 
@@ -60,6 +61,7 @@ llm = ChatOpenAI(
 vector_store = None
 
 def initialize_vector_store(docs):
+
     global vector_store
     if vector_store is None:
         vector_store = IRISVector.from_documents(
@@ -71,6 +73,7 @@ def initialize_vector_store(docs):
     else:
         vector_store.add_documents(docs)
     return vector_store
+
 
 class QuestionAnswer(BaseModel):
     question: str
@@ -84,6 +87,7 @@ class MultipleChoiceQuestion(BaseModel):
 class MCQResponse(BaseModel):
     multiple_choice_questions: List[MultipleChoiceQuestion]
 
+
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...), directory: str = ""):
     # Save uploaded file
@@ -95,21 +99,20 @@ async def upload_pdf(file: UploadFile = File(...), directory: str = ""):
     
     # Extract text from PDF
     pdf_reader = PdfReader(pdf_path)
-    extracted_text = []
+    extracted_text = [page.extract_text() for page in pdf_reader.pages if page.extract_text()]
 
     for page in pdf_reader.pages:
         text = page.extract_text()
         if text:
             extracted_text.append(text)
 
+
     # Use OCR if no text was extracted
     if not extracted_text:
         reader = easyocr.Reader(['en'])
         images = convert_from_path(pdf_path)
-        
         for image in images:
-            image_np = np.array(image)
-            result = reader.readtext(image_np)
+            result = reader.readtext(np.array(image))
             page_text = " ".join([text for (bbox, text, prob) in result])
             if page_text.strip():
                 extracted_text.append(page_text)
@@ -139,6 +142,7 @@ async def upload_pdf(file: UploadFile = File(...), directory: str = ""):
         "text_file": text_path
     }
 
+
 @app.post("/query")
 async def query_document(query: str):
     if vector_store is None:
@@ -159,6 +163,7 @@ async def query_document(query: str):
         "context": context,
         "sources": [{"content": doc.page_content, "score": score} for doc, score in docs_with_score]
     }
+
 
 @app.post("/qa")
 async def get_qa(query: str):
@@ -182,6 +187,7 @@ async def get_qa(query: str):
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Failed to parse questions output")
 
+# Helper function to generate multiple-choice questions
 def create_multiple_choice_questions(context: str, num_questions: int) -> List[MultipleChoiceQuestion]:
     prompt_template = PromptTemplate(
         input_variables=["context", "num_questions"],
@@ -219,11 +225,13 @@ def get_context(query: str) -> str:
     docs_with_score = vector_store.similarity_search_with_score(query)
     return "\n".join([doc.page_content for doc, _ in docs_with_score])
 
+
 @app.post("/mcq", response_model=MCQResponse)
 async def get_mcq(query: str = "create MCQs", num_questions: int = 1):
     context = get_context(query)
     mcqs = create_multiple_choice_questions(context, num_questions)
     return MCQResponse(multiple_choice_questions=mcqs)
+
 
 @app.get("/summary")
 async def summary_document():
