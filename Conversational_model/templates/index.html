@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agora AI Conversation</title>
+</head>
+<body>
+    <h1>Agora AI Conversation Test</h1>
+    <button onclick="startConversation()">Start Conversation</button>
+    <button onclick="stopConversation()">Stop Conversation</button>
+    <script src="https://download.agora.io/sdk/release/AgoraRTC_N.js"></script>
+    <script>
+        // Replace with your Agora credentials
+        const APP_ID = "3e56fa60f52a4e7e84ef0bf8a418bf28"; // Insert your App ID
+        const TOKEN = null; // Optional token
+        const CHANNEL_NAME = "hacktx"; // Define a channel name
+
+        // Initialize the Agora client
+        const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+
+        let localAudioTrack;
+
+        async function startConversation() {
+            await client.join(APP_ID, CHANNEL_NAME, TOKEN, null);
+            localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+            await client.publish([localAudioTrack]);
+            console.log("Published local audio track");
+
+            // Listen for incoming audio
+            client.on("user-published", async (user, mediaType) => {
+                await client.subscribe(user, mediaType);
+                console.log("Subscribed to user:", user.uid);
+
+                if (mediaType === "audio") {
+                    const remoteAudioTrack = user.audioTrack;
+                    remoteAudioTrack.play();
+
+                    // Capture audio and send to backend for AI processing
+                    captureAndProcessAudio();
+                }
+            });
+        }
+
+        async function stopConversation() {
+            await client.leave();
+            localAudioTrack.close();
+            console.log("Left the channel");
+        }
+
+        // Function to capture audio and process with AI (Placeholder)
+        async function captureAndProcessAudio() {
+            // Fetch transcribed text from your backend and play the AI's response
+            const response = await fetch("http://localhost:5000/process_audio", {
+                method: "POST",
+                body: JSON.stringify({ audio: "sample_audio_data" }), // Send actual audio data
+                headers: { "Content-Type": "application/json" }
+            });
+            const result = await response.json();
+            playAIResponse(result.response);
+        }
+
+        // Function to play AI response
+        function playAIResponse(text) {
+            const audio = new Audio(`http://localhost:5000/text_to_speech?text=${encodeURIComponent(text)}`);
+            audio.play();
+        }
+    </script>
+</body>
+</html>
