@@ -3,32 +3,18 @@
 import { Button } from '@/components/ui/button'
 import { useEffect, useRef, useState, useCallback } from 'react'
 
-
 type Question = {
-  question: string
-  options: string[]
-  correctAnswer: string
+  question: string;
+  choices: { A: string; B: string; C: string; D: string; };
+  correct_answer: string;
 }
 
-const questions: Question[] = [
-  {
-    question: "What is the capital of France?",
-    options: ["London", "Paris", "Berlin", "Madrid"],
-    correctAnswer: "Paris"
-  },
-  {
-    question: "Which planet is closest to the Sun?",
-    options: ["Venus", "Mars", "Mercury", "Earth"],
-    correctAnswer: "Mercury"
-  },
-  {
-    question: "What is 2 + 2?",
-    options: ["3", "4", "5", "6"],
-    correctAnswer: "4"
-  }
-]
+interface SpaceInvadersProps {
+  questions: Question[];
+  onClose: () => void;
+}
 
-const CANVAS_WIDTH = 800
+const CANVAS_WIDTH = 1500
 const CANVAS_HEIGHT = 600
 const PLAYER_WIDTH = 40
 const PLAYER_HEIGHT = 30
@@ -36,7 +22,7 @@ const PLAYER_SPEED = 20
 const BULLET_SPEED = 7
 const ENEMY_SPEED = 0.5
 
-export function SpaceInvaders({ onClose }: { onClose: () => void }) {
+export function SpaceInvaders({ questions, onClose }: SpaceInvadersProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const gameStateRef = useRef({
     score: 0,
@@ -81,17 +67,17 @@ export function SpaceInvaders({ onClose }: { onClose: () => void }) {
     const { currentQuestionIndex } = gameStateRef.current
     if (currentQuestionIndex < questions.length) {
       const currentQuestion = questions[currentQuestionIndex]
-      gameStateRef.current.enemies = currentQuestion.options.map((option, index) => ({
+      gameStateRef.current.enemies = Object.entries(currentQuestion.choices).map(([key, value], index) => ({
         x: (index + 1) * (CANVAS_WIDTH / 5),
         y: 50,
-        text: option,
+        text: `${key}: ${value}`,
         width: 80
       }))
     } else {
       gameStateRef.current.gameWon = true
       setGameEnded(true)
     }
-  }, [])
+  }, [questions])
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const { playerX } = gameStateRef.current
@@ -120,12 +106,10 @@ export function SpaceInvaders({ onClose }: { onClose: () => void }) {
     gameState.bullets.forEach(bullet => {
       gameState.enemies = gameState.enemies.filter(enemy => {
         if (
-          bullet.x > enemy.x &&
-          bullet.x < enemy.x + enemy.width &&
-          bullet.y > enemy.y &&
-          bullet.y < enemy.y + 30
+          bullet.x > enemy.x && bullet.x < enemy.x + enemy.width &&
+          bullet.y > enemy.y && bullet.y < enemy.y + 30
         ) {
-          if (enemy.text === questions[gameState.currentQuestionIndex].correctAnswer) {
+          if (enemy.text.startsWith(questions[gameState.currentQuestionIndex].correct_answer)) {
             gameState.score += 100
             gameState.currentQuestionIndex++
             correctAnswerHit = true
@@ -166,7 +150,7 @@ export function SpaceInvaders({ onClose }: { onClose: () => void }) {
         initializeEnemies()
       }
     }
-  }, [initializeEnemies])
+  }, [initializeEnemies, questions])
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -219,7 +203,7 @@ export function SpaceInvaders({ onClose }: { onClose: () => void }) {
       ctx.textAlign = 'center'
       ctx.fillText('YOU WON!', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2)
     }
-  }, [])
+  }, [questions])
 
   const gameLoop = useCallback(() => {
     if (gameStateRef.current.gameOver || gameStateRef.current.gameWon) {
@@ -233,11 +217,9 @@ export function SpaceInvaders({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     if (!gameStarted) return
-
     initializeEnemies()
     requestRef.current = requestAnimationFrame(gameLoop)
     document.addEventListener('keydown', handleKeyDown)
-
     return () => {
       cancelAnimationFrame(requestRef.current!)
       document.removeEventListener('keydown', handleKeyDown)
@@ -267,12 +249,12 @@ export function SpaceInvaders({ onClose }: { onClose: () => void }) {
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
       `}</style>
       <h1 className="text-3xl font-bold text-white mb-4 font-['Press_Start_2P']">QUIZ INVADERS</h1>
-      {!gameStarted ? (
+      {!gameStarted || gameEnded ? (
         <button
           className="bg-white text-black font-bold py-2 px-4 rounded font-['Press_Start_2P']"
           onClick={startGame}
         >
-          Start Game
+          {gameEnded ? 'Play Again' : 'Start Game'}
         </button>
       ) : (
         <canvas
@@ -283,17 +265,9 @@ export function SpaceInvaders({ onClose }: { onClose: () => void }) {
           style={{ width: '100%', maxWidth: CANVAS_WIDTH, height: 'auto' }}
         />
       )}
-      {gameEnded && (
-        <button
-          className="bg-white text-black font-bold py-2 px-4 rounded mt-4 font-['Press_Start_2P']"
-          onClick={startGame}
-        >
-          Play Again
-        </button>
-      )}
       <Button onClick={onClose} variant="destructive" className="mt-4">
-                Back to Games
-    </Button>
+        Back to Games
+      </Button>
     </div>
   )
 }
