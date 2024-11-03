@@ -1,13 +1,16 @@
+import React from "react";
+import { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { CourseProvider } from "@/context/CourseContext";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
-import "@/app/globals.css";
+import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
-export const metadata = {
-    title: "ClassMate",
-    description: "Document Management and Q&A Platform",
+export const metadata: Metadata = {
+    title: "Course Platform",
+    description: "Learn and grow with our online courses",
 };
 
 export default function RootLayout({
@@ -18,15 +21,17 @@ export default function RootLayout({
     return (
         <html lang="en">
             <body className={inter.className}>
-                <div className="flex h-screen bg-background">
-                    <Sidebar />
-                    <div className="flex flex-col flex-1 overflow-hidden">
-                        <Header />
-                        <main className="flex-1 overflow-y-auto p-4">
-                            {children}
-                        </main>
+                <CourseProvider>
+                    <div className="flex h-screen bg-background">
+                        <Sidebar />
+                        <div className="flex-1 flex flex-col overflow-hidden">
+                            <Header />
+                            <main className="flex-1 overflow-y-auto p-6">
+                                {children}
+                            </main>
+                        </div>
                     </div>
-                </div>
+                </CourseProvider>
             </body>
         </html>
     );
