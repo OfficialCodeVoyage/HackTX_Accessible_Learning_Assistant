@@ -82,8 +82,19 @@ export default function Component() {
   }, [])
 
   return (
-    <div className="w-full h-screen bg-black">
-      <canvas ref={canvasRef} className="absolute top-0 left-0 h-full" />
+    <div className="flex justify-center items-center h-screen bg-black overflow-hidden">
+    <div className="relative w-[500px] h-full">
+      <canvas
+        ref={canvasRef}
+        className="absolute top-0 left-0 h-full w-full"
+        width="500" // Set the width attribute to 500 pixels
+        height="1000" // Set height to whatever you want or use style for flexibility
+        style={{ width: '500px', height: 'auto' }} // Set canvas width to 500px and height responsive
+      />
     </div>
+  </div>
+  
+  
+
   )
 }
