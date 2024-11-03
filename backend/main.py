@@ -72,9 +72,11 @@ class MCQResponse(BaseModel):
     multiple_choice_questions: List[MultipleChoiceQuestion]
 
 @app.post("/upload")
-async def upload_pdf(file: UploadFile = File(...)):
+async def upload_pdf(file: UploadFile = File(...), directory: str = ""):
     # Save uploaded file
-    pdf_path = os.path.join(UPLOAD_DIR, file.filename)
+    upload_dir = os.path.join(UPLOAD_DIR, directory)
+    os.makedirs(upload_dir, exist_ok=True)
+    pdf_path = os.path.join(upload_dir, file.filename)
     with open(pdf_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     
@@ -103,14 +105,16 @@ async def upload_pdf(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="No text could be extracted from the PDF")
 
     # Save extracted text
+    extracted_dir = os.path.join(EXTRACTED_TEXT_DIR, directory)
+    os.makedirs(extracted_dir, exist_ok=True)
     text_filename = f"{os.path.splitext(file.filename)[0]}.txt"
-    text_path = os.path.join(EXTRACTED_TEXT_DIR, text_filename)
+    text_path = os.path.join(extracted_dir, text_filename)
     with open(text_path, "w", encoding="utf-8") as text_file:
         text_file.write("\n\n".join(extracted_text))
 
     # Create documents for vector store
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    docs = [Document(page_content=text, metadata={"page": i, "filename": file.filename}) 
+    docs = [Document(page_content=text, metadata={"page": i, "filename": file.filename, "directory": directory}) 
             for i, text in enumerate(extracted_text)]
     docs = text_splitter.split_documents(docs)
 
@@ -201,9 +205,6 @@ def get_context(query: str) -> str:
     
     docs_with_score = vector_store.similarity_search_with_score(query)
     return "\n".join([doc.page_content for doc, _ in docs_with_score])
-
-class MCQResponse(BaseModel):
-    multiple_choice_questions: List[MultipleChoiceQuestion]
 
 @app.post("/mcq", response_model=MCQResponse)
 async def get_mcq(query: str = "create MCQs", num_questions: int = 1):
