@@ -1,0 +1,335 @@
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+1 : “shiv rpi ”
+Linear Algebra 
+A gentle introduction
+Linear Algebra has become as basic and as applicable 
+as calculus, and fortunately it is easier.
+--Gilbert Strang, MIT
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+2 : “shiv rpi ”
+What is a Vector ?
+Think of a vector as a directed line 
+segment in N -dimensions ! (has “length” 
+and “direction”)
+Basic idea: convert geometry in higher 
+dimensions into algebra!
+Once you define a “nice” basis along 
+each dimension: x -, y-, z-axis …  
+Vector becomes a N x 1 matrix!
+v= [a  b  c]T
+Geometry starts to become linear 
+algebra on vectors like v!
+
+
+
+
+=
+cba
+v
+xy
+v
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+3 : “shiv rpi ”
+Vector Addition: A+B
+) , (),(),(2 2 1 1 2 1 2 1 y xy x yy xx ++= + =+wv
+ABA
+BCA+B = C
+(use the head -to-tail method 
+to combine vectors)A+B
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+4 : “shiv rpi ”
+Scalar Product: av
+) ,(),(  2 1 2 1 ax ax xxa a = =v
+v
+av
+Change only the length (“scaling”), but keep direction fixed .
+Sneak peek: matrix operation ( Av) can change length, 
+direction and also dimensionality !
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+5 : “shiv rpi ”
+Vectors: Dot Product
+Td
+A B A B a b c e ad be cf
+f
+ = = = + +
+
+2 TA A A aa bb cc= = + +
+) cos( BA BA=
+Think of the dot product as 
+a matrix multiplication
+The magnitude is the dot 
+product of a vector with itself
+The dot product is also related to the 
+angle between the two vectors
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+6 : “shiv rpi ”
+Inner (dot) Product: v.w or wTv
+v
+w
+
+2 2 11 2 1 2 1 . ), ).(,( . yx yx yy xx wv += =
+The inner product is a 
+ SCALAR!
+cos||||||||), ).(,( . 2 1 2 1 w v yy xx wv = =
+w v wv ⊥=0 . 
+If vectors v, w are “columns”, then dot product is wTv
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+7 : “shiv rpi ”
+Projection: Using Inner Products (I)
+p= a(aTx)
+||a|| = aTa = 1
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+8 : “shiv rpi ”
+Bases & Orthonormal Bases
+Basis (or axes): frame of reference
+vs
+Basis: a space is totally defined by a set of vectors –any point is a linear 
+combination of the basis
+Ortho -Normal: orthogonal + normal
+[Sneak peek : 
+Orthogonal : dot product is zero
+Normal : magnitude is one ]
+000
+===
+zyzxyx
+
+
+TTT
+zyx
+100010001
+===
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+9 : “shiv rpi ”
+What is a Matrix?
+A matrix is a set of elements, organized into rows and 
+columns
+
+
+dcba
+rows
+columns
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+10 : “shiv rpi ”
+Basic Matrix Operations
+Addition, Subtraction, Multiplication: creating new matrices (or functions)
+
+
+++++=
++
+
+hdgcfbea
+hgfe
+dcba
+
+
+−−−−=
+−
+
+hdgcfbea
+hgfe
+dcba
+
+
+++++=
+
+
+
+dhcf dgcebhaf bgae
+hgfe
+dcba
+Just add elements
+Just subtract elements
+Multiply each row 
+by each column
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+11 : “shiv rpi ”
+Matrix Times Matrix
+NM L=
+
+
+
+
+
+
+
+
+
+=
+
+
+
+
+33 32 3123 22 2113 12 11
+33 32 3123 22 2113 12 11
+33 32 3123 22 2113 12 11
+n n nn n nn n n
+m m mm m mm m m
+l l ll l ll l l
+32 13 22 12 12 11 12 nm nm nm l + + =
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+12 : “shiv rpi ”
+Multiplication
+Is AB = BA?  Maybe, but maybe not!
+Matrix multiplication AB: apply transformation B first, and 
+then again transform using A!
+Heads up: multiplication is NOT commutative!
+Note : If A and B both represent either pure “ rotation ” or 
+“scaling ” they can be interchanged (i.e. AB = BA)
+
++=
+
+
+
+... ...... bgae
+hgfe
+dcba
+
++=
+
+
+
+... ......fc ea
+dcba
+hgfe
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+13 : “shiv rpi ”
+Matrix operating on vectors
+Matrix is like a function that transforms the vectors on a plane
+Matrix operating on a general point => transforms x -and y -components
+System of linear equations : matrix is just the bunch of coeffs !  
+x’ = ax + by 
+y’ = cx + dy
+=
+
+''
+yx
+dcba
+
+
+yx
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+14 : “shiv rpi ”
+Direction Vector Dot Matrix
+c b a vz y x v v v ++=
+0 0 0 1 1x x x x x
+y y y y y
+z z z z z
+x x x y x z x
+y x y y y z y
+z x z y z z za b c d v
+a b c d v
+a b c d v
+v v a v b v c
+v v a v b v c
+v v a v b v c   
+   
+    =  =    
+   
+   
+= + +
+= + +
+= + +v M v
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+15 : “shiv rpi ”
+Inverse of a Matrix
+Identity matrix: 
+AI = A
+Inverse exists only for square 
+matrices that are non-singular
+Maps N -d space to another 
+N-d space bijectively
+Some matrices have an 
+inverse, such that:
+AA-1= I
+Inversion is tricky:
+(ABC)-1= C-1B-1A-1
+Derived from non -
+commutativity property
+
+
+
+
+=
+100010001
+I
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+16 : “shiv rpi ”
+Determinant of a Matrix
+Used for inversion
+If det(A) = 0, then A has no inverse
+
+=dcbaA
+bc ad A−=) det(
+
+
+−−
+−=−
+acb d
+bc adA11
+http://www.euclideanspace.com/maths/algebra/matrix/functio
+ns/inverse/threeD/index.htm
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+17 : “shiv rpi ”
+Transpose of a Matrix
+Written AT(transpose of A)
+Keep the diagonal but reflect all other elements about the diagonal
+aij= ajiwhere iis the row and j the column
+in this example, elements c and b were exchanged 
+For orthonormal matrices A-1= AT
+
+=dcbaA
+T acAbd=
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+18 : “shiv rpi ”
+Vectors: Cross Product
+The cross product of vectors Aand Bis a vector Cwhich is 
+perpendicular to Aand B
+The magnitude of Cis proportional to the sin of the angle 
+between Aand B
+The direction of Cfollows the right hand rule if we are 
+working in a right -handed coordinate system
+) sin( BA BA=
+B
+AA×B
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+19 : “shiv rpi ”
+MAGNITUDE OF THE CROSS 
+PRODUCT
+
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+20 : “shiv rpi ”
+DIRECTION OF THE CROSS 
+PRODUCT
+The right hand rule determines the direction of the 
+cross product
+
+
+Shivkumar KalyanaramanRensselaer Polytechnic Institute
+21 : “shiv rpi ”
+For more details
+Prof. Gilbert Strang’s course videos: 
+http://ocw.mit.edu/OcwWeb/Mathematics/18 -06Spring -
+2005/VideoLectures/index.htm
+Esp. the lectures on eigenvalues/eigenvectors, singular value 
+decomposition & applications of both. (second half of course)
+Online Linear Algebra Tutorials: 
+http://tutorial.math.lamar.edu/AllBrowsers/2318/2318.asp

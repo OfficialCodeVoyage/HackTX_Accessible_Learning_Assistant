@@ -1,0 +1,9 @@
+frontend/.next/cache
+.venv
+.myenv
+myenv/
+myenv\
+.env
+backend\myenv
+backend/myenv
+.backend\myenv
