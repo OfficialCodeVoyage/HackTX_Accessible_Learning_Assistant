@@ -1,70 +1,85 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agora AI Conversation</title>
+    <title>Azure AI Continuous Conversation</title>
 </head>
 <body>
-    <h1>Agora AI Conversation Test</h1>
-    <button onclick="startConversation()">Start Conversation</button>
-    <button onclick="stopConversation()">Stop Conversation</button>
-    <script src="https://download.agora.io/sdk/release/AgoraRTC_N.js"></script>
+    <h1>Azure AI Continuous Conversation</h1>
+    <button id="toggleConversation">Start Conversation</button>
+    <audio id="responseAudio" controls></audio>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"
+            integrity="sha384-XTSLbr0c4SNF5jUgXwaPYroSRjD9X8EJ+j6+LUtsZG46FJilXlb+uHSh2Y9HkX9K"
+            crossorigin="anonymous"></script>
     <script>
-        // Replace with your Agora credentials
-        const APP_ID = "3e56fa60f52a4e7e84ef0bf8a418bf28"; // Insert your App ID
-        const TOKEN = null; // Optional token
-        const CHANNEL_NAME = "hacktx"; // Define a channel name
+        const toggleButton = document.getElementById('toggleConversation');
+        const responseAudio = document.getElementById('responseAudio');
+        let isConversing = false;
+        let mediaRecorder;
+        let socket;
 
-        // Initialize the Agora client
-        const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+        toggleButton.addEventListener('click', async () => {
+            if (!isConversing) {
+                // Start Conversation
+                toggleButton.textContent = 'End Conversation';
+                isConversing = true;
 
-        let localAudioTrack;
+                // Initialize Socket.IO
+                socket = io('http://localhost:5000');
 
-        async function startConversation() {
-            await client.join(APP_ID, CHANNEL_NAME, TOKEN, null);
-            localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-            await client.publish([localAudioTrack]);
-            console.log("Published local audio track");
+                socket.on('connect', () => {
+                    console.log('Connected to backend');
+                });
 
-            // Listen for incoming audio
-            client.on("user-published", async (user, mediaType) => {
-                await client.subscribe(user, mediaType);
-                console.log("Subscribed to user:", user.uid);
+                socket.on('ai_audio', (data) => {
+                    // Play AI response
+                    const audioBlob = new Blob([data.audio], { type: 'audio/wav' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    responseAudio.src = audioUrl;
+                    responseAudio.play();
+                });
 
-                if (mediaType === "audio") {
-                    const remoteAudioTrack = user.audioTrack;
-                    remoteAudioTrack.play();
+                socket.on('error', (data) => {
+                    alert('Error: ' + data.message);
+                });
 
-                    // Capture audio and send to backend for AI processing
-                    captureAndProcessAudio();
+                // Start recording audio
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.start();
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0 && socket.connected) {
+                        event.data.arrayBuffer().then(buffer => {
+                            socket.emit('user_audio', { audio: new Uint8Array(buffer) });
+                        });
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    console.log('MediaRecorder stopped');
+                };
+
+                // Automatically stop recording and start sending data periodically
+                mediaRecorder.onstart = () => {
+                    console.log('MediaRecorder started');
+                };
+
+                // Optionally, set intervals or use Speech Recognition APIs for better control
+            } else {
+                // End Conversation
+                toggleButton.textContent = 'Start Conversation';
+                isConversing = false;
+
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.stop();
                 }
-            });
-        }
 
-        async function stopConversation() {
-            await client.leave();
-            localAudioTrack.close();
-            console.log("Left the channel");
-        }
-
-        // Function to capture audio and process with AI (Placeholder)
-        async function captureAndProcessAudio() {
-            // Fetch transcribed text from your backend and play the AI's response
-            const response = await fetch("http://localhost:5000/process_audio", {
-                method: "POST",
-                body: JSON.stringify({ audio: "sample_audio_data" }), // Send actual audio data
-                headers: { "Content-Type": "application/json" }
-            });
-            const result = await response.json();
-            playAIResponse(result.response);
-        }
-
-        // Function to play AI response
-        function playAIResponse(text) {
-            const audio = new Audio(`http://localhost:5000/text_to_speech?text=${encodeURIComponent(text)}`);
-            audio.play();
-        }
+                if (socket) {
+                    socket.disconnect();
+                }
+            }
+        });
     </script>
 </body>
 </html>
