@@ -1,142 +1,74 @@
+# Import necessary libraries
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import shutil
 import os
-import openai
 import json
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
-from pinecone import Pinecone, ServerlessSpec
-import uuid  # Add this import
+import uuid
 import easyocr
 from pdf2image import convert_from_path
 import numpy as np
-from langchain_community.chat_models import ChatOpenAI
-from langchain_community.embeddings import OpenAIEmbeddings
+from typing import List, Dict
+from pydantic import BaseModel
+from langchain.docstore.document import Document
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.chat_models import ChatOpenAI
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
-from pydantic import BaseModel
-from typing import List, Dict
+from langchain_iris import IRISVector
 
-load_dotenv()
+# Load environment variables
+load_dotenv(override=True)
 
-openai_api_key = os.getenv('OPENAI_API_KEY')
-pinecone_api_key = os.getenv('PINECONE')
-openai.api_key = openai_api_key
-pc = Pinecone(api_key=pinecone_api_key)
-
-embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
-llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo", openai_api_key=openai_api_key)
-
-def get_embedding(text):
-    return embeddings.embed_query(text)
-
-index_name = "hacktx"
-
-if index_name not in pc.list_indexes().names():
-    pc.create_index(
-        name=index_name,
-        dimension=1536,  # OpenAI's ada-002 model uses 1536 dimensions
-        metric="cosine",
-        spec=ServerlessSpec(
-            cloud="aws",
-            region="us-east-1"  # Changed to us-east-1 for the free Starter plan
-        )
-    )
-
-index = pc.Index(index_name)
-
-# def get_embedding(text, model="text-embedding-ada-002"):
-#     response = openai.Embedding.create(
-#         model=model,
-#         input=[text]
-#     )
-#     return response['data'][0]['embedding']
-
+# Initialize FastAPI and add CORS middleware
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Adjust with your frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+# Constants
 UPLOAD_DIR = "uploaded_files"
 EXTRACTED_TEXT_DIR = "extracted_texts"
-EMBEDDINGS_DIR = "embeddings"
+COLLECTION_NAME = "document_store"
+IRIS_CONNECTION_STRING = os.getenv("CONNECTION_STRING")
 
+# Create directories for uploads and extracted texts
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(EXTRACTED_TEXT_DIR, exist_ok=True)
 
-@app.post("/upload")
-async def upload_pdf(file: UploadFile = File(...)):
-    pdf_path = os.path.join(UPLOAD_DIR, file.filename)
-    with open(pdf_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    
-    pdf_reader = PdfReader(pdf_path)
-    extracted_text = []
+# Initialize LangChain components
+embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
+llm = ChatOpenAI(
+    temperature=0, 
+    model_name="gpt-3.5-turbo", 
+    openai_api_key=os.getenv("OPENAI_API_KEY")
+)
 
-    for page in pdf_reader.pages:
-        text = page.extract_text()
-        if text:
-            extracted_text.append(text)
+# Global IRIS vector store instance
+vector_store = None
 
-    # If no text was extracted, use OCR
-    if not extracted_text:
-        reader = easyocr.Reader(['en'])
-        images = convert_from_path(pdf_path)
-        
-        for image in images:
-            image_np = np.array(image)
-            result = reader.readtext(image_np)
-            page_text = " ".join([text for (bbox, text, prob) in result])
-            if page_text.strip():
-                extracted_text.append(page_text)
+def initialize_vector_store(docs):
+    """Initialize or update the global vector store."""
+    global vector_store
+    if vector_store is None:
+        vector_store = IRISVector.from_documents(
+            embedding=embeddings,
+            documents=docs,
+            collection_name=COLLECTION_NAME,
+            connection_string=IRIS_CONNECTION_STRING
+        )
+    else:
+        vector_store.add_documents(docs)
+    return vector_store
 
-    # If still no text after OCR, return an error
-    if not extracted_text:
-        return {"error": "No text could be extracted from the PDF, even with OCR"}
-
-    text_filename = f"{os.path.splitext(file.filename)[0]}.txt"
-    text_path = os.path.join(EXTRACTED_TEXT_DIR, text_filename)
-    with open(text_path, "w", encoding="utf-8") as text_file:
-        text_file.write("\n\n".join(extracted_text))
-
-    # Generate embeddings and store in Pinecone
-    for i, page_text in enumerate(extracted_text):
-        if page_text.strip():
-            embedding = get_embedding(page_text)
-            unique_id = str(uuid.uuid4())
-            index.upsert(vectors=[
-                {
-                    "id": unique_id,
-                    "values": embedding,
-                    "metadata": {"text": page_text, "page": i, "filename": file.filename}
-                }
-            ])
-
-    return {
-        "message": "PDF processed, text extracted, and embeddings stored in Pinecone",
-        "text_file": text_path
-    }
-
-# @app.post("/query")
-# async def query_document(query: str):
-#     query_embedding = get_embedding(query)
-#     search_results = index.query(vector=query_embedding, top_k=3, include_metadata=True)
-
-#     context = "\n".join([result['metadata']['text'] for result in search_results['matches']])
-
-#     response = openai.ChatCompletion.create(
-#         model="gpt-3.5-turbo",
-#         messages=[
-#             {"role": "system", "content": "You are a helpful assistant. Use the following context to answer the user's question."},
-#             {"role": "user", "content": f"Context: {context}\n\nQuestion: {query}"}
-#         ]
-#     )
-
-#     return {
-#         "answer": response['choices'][0]['message']['content'],
-#         "context": context
-#     }
-
-def get_embedding(text):
-    return embeddings.embed_query(text)
-
+# Pydantic models for structured responses
 class QuestionAnswer(BaseModel):
     question: str
     answer: str
@@ -146,34 +78,89 @@ class MultipleChoiceQuestion(BaseModel):
     choices: Dict[str, str]
     correct_answer: str
 
-def get_context(query: str):
-    query_embedding = get_embedding(query)
-    search_results = index.query(vector=query_embedding, top_k=3, include_metadata=True)
-    return "\n".join([result['metadata']['text'] for result in search_results['matches']])
+class MCQResponse(BaseModel):
+    multiple_choice_questions: List[MultipleChoiceQuestion]
 
-def get_full_context():
-    # Fetch all vectors from the Pinecone index
-    # This is a hypothetical method - you'd need to check Pinecone's API for the actual method
-    all_vectors = index.fetch_all()
+# Endpoint to upload and process PDFs
+@app.post("/upload")
+async def upload_pdf(file: UploadFile = File(...), directory: str = ""):
+    # Save uploaded file
+    upload_dir = os.path.join(UPLOAD_DIR, directory)
+    os.makedirs(upload_dir, exist_ok=True)
+    pdf_path = os.path.join(upload_dir, file.filename)
+    with open(pdf_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
     
-    # Extract all text from the metadata
-    all_text = [vector['metadata']['text'] for vector in all_vectors if 'text' in vector['metadata']]
-    
-    # Join all text into a single string
-    full_context = "\n\n".join(all_text)
-    
-    return full_context
+    # Extract text from PDF
+    pdf_reader = PdfReader(pdf_path)
+    extracted_text = [page.extract_text() for page in pdf_reader.pages if page.extract_text()]
 
-def create_summary(context: str) -> str:
+    # Use OCR if no text was extracted
+    if not extracted_text:
+        reader = easyocr.Reader(['en'])
+        images = convert_from_path(pdf_path)
+        for image in images:
+            result = reader.readtext(np.array(image))
+            page_text = " ".join([text for (bbox, text, prob) in result])
+            if page_text.strip():
+                extracted_text.append(page_text)
+
+    if not extracted_text:
+        raise HTTPException(status_code=400, detail="No text could be extracted from the PDF")
+
+    # Save extracted text
+    extracted_dir = os.path.join(EXTRACTED_TEXT_DIR, directory)
+    os.makedirs(extracted_dir, exist_ok=True)
+    text_filename = f"{os.path.splitext(file.filename)[0]}.txt"
+    text_path = os.path.join(extracted_dir, text_filename)
+    with open(text_path, "w", encoding="utf-8") as text_file:
+        text_file.write("\n\n".join(extracted_text))
+
+    # Create documents for vector store
+    text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    docs = [Document(page_content=text, metadata={"page": i, "filename": file.filename, "directory": directory}) 
+            for i, text in enumerate(extracted_text)]
+    docs = text_splitter.split_documents(docs)
+
+    # Initialize or update vector store
+    initialize_vector_store(docs)
+
+    return {
+        "message": "PDF processed and stored in IRIS Vector database",
+        "text_file": text_path
+    }
+
+# Endpoint to query the documents in vector store
+@app.post("/query")
+async def query_document(query: str):
+    if vector_store is None:
+        raise HTTPException(status_code=400, detail="No documents have been uploaded yet")
+
+    docs_with_score = vector_store.similarity_search_with_score(query, k=3)
+    context = "\n".join([doc.page_content for doc, _ in docs_with_score])
+
     prompt_template = PromptTemplate(
-        input_variables=["context"],
-        template="Summarize the following text in a concise paragraph:\n\n{context}"
+        input_variables=["context", "question"],
+        template="Use the following context to answer the user's question.\n\nContext: {context}\n\nQuestion: {question}\n\nAnswer:"
     )
     chain = LLMChain(llm=llm, prompt=prompt_template)
-    summary = chain.run(context=context)
-    return summary.strip()
+    answer = chain.run(context=context, question=query)
 
-def create_questions(context: str) -> List[QuestionAnswer]:
+    return {
+        "answer": answer.strip(),
+        "context": context,
+        "sources": [{"content": doc.page_content, "score": score} for doc, score in docs_with_score]
+    }
+
+# Endpoint to generate open-ended questions with answers
+@app.post("/qa")
+async def get_qa(query: str):
+    if vector_store is None:
+        raise HTTPException(status_code=400, detail="No documents have been uploaded yet")
+
+    docs_with_score = vector_store.similarity_search_with_score(query)
+    context = "\n".join([doc.page_content for doc, _ in docs_with_score])
+
     prompt_template = PromptTemplate(
         input_variables=["context"],
         template="Generate 3 open-ended questions based on the following text. For each question, also provide a concise answer. Format your response as JSON:\n\n{context}"
@@ -183,10 +170,12 @@ def create_questions(context: str) -> List[QuestionAnswer]:
     
     try:
         questions_list = json.loads(questions_raw)
-        return [QuestionAnswer(question=q["question"], answer=q["answer"]) for q in questions_list]
+        return {"questions": [QuestionAnswer(question=q["question"], answer=q["answer"]) 
+                            for q in questions_list]}
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Failed to parse questions output")
 
+# Helper function to generate multiple-choice questions
 def create_multiple_choice_questions(context: str, num_questions: int) -> List[MultipleChoiceQuestion]:
     prompt_template = PromptTemplate(
         input_variables=["context", "num_questions"],
@@ -217,86 +206,31 @@ def create_multiple_choice_questions(context: str, num_questions: int) -> List[M
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Failed to parse MCQ output")
 
-class MCQResponse(BaseModel):
-    multiple_choice_questions: List[MultipleChoiceQuestion]
-
-@app.post("/qa")
-async def get_qa(query: str):
-    context = get_context(query)
-    questions = create_questions(context)
-    return {"questions": questions}
-
+# Endpoint to create multiple-choice questions
 @app.post("/mcq", response_model=MCQResponse)
 async def get_mcq(query: str = "create MCQs", num_questions: int = 1):
     context = get_context(query)
     mcqs = create_multiple_choice_questions(context, num_questions)
     return MCQResponse(multiple_choice_questions=mcqs)
 
-@app.post("/query")
-async def query_document(query: str):
-    context = get_context(query)
-
-    prompt_template = PromptTemplate(
-        input_variables=["context", "question"],
-        template="You are a helpful assistant. Use the following context to answer the user's question.\n\nContext: {context}\n\nQuestion: {question}\n\nAnswer:"
-    )
-    chain = LLMChain(llm=llm, prompt=prompt_template)
-    answer = chain.run(context=context, question=query)
-
-    return {
-        "answer": answer.strip(),
-        "context": context
-    }
-
-# @app.post("/query")
-# async def query_document(query: str):
-#     # Get query embedding and search Pinecone
-#     query_embedding = get_embedding(query)
-#     search_results = index.query(vector=query_embedding, top_k=3, include_metadata=True)
-#     context = "\n".join([result['metadata']['text'] for result in search_results['matches']])
-
-#     # Initialize LangChain components
-#     llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo", openai_api_key=openai_api_key)
-    
-#     # Create a prompt template
-#     prompt_template = PromptTemplate(
-#         input_variables=["context", "question"],
-#         template="You are a helpful assistant. Use the following context to answer the user's question.\n\nContext: {context}\n\nQuestion: {question}\n\nAnswer:"
-#     )
-
-#     # Create an LLMChain
-#     chain = LLMChain(llm=llm, prompt=prompt_template)
-
-#     # Run the chain
-#     response = chain.run(context=context, question=query)
-
-#     return {
-#         "answer": response,
-#         "context": context
-#     }
-
-
+# Endpoint to summarize the document
 @app.get("/summary")
 async def summary_document():
-    # Get query embedding and search Pinecone
-    query = "Create a Summary of the document"
-    query_embedding = get_embedding(query)
-    search_results = index.query(vector=query_embedding, top_k=3, include_metadata=True)
-    context = "\n".join([result['metadata']['text'] for result in search_results['matches']])
+    if vector_store is None:
+        raise HTTPException(status_code=400, detail="No documents have been uploaded yet")
 
-    # Create a prompt template
+    docs_with_score = vector_store.similarity_search_with_score("Create a Summary of the document")
+    context = "\n".join([doc.page_content for doc, _ in docs_with_score])
+
     prompt_template = PromptTemplate(
-        input_variables=["context", "question"],
-        template="You are a helpful assistant. Use the following context to answer the user's question.\n\nContext: {context}\n\nQuestion: {question}\n\nAnswer:"
+        input_variables=["context"],
+        template="Provide a comprehensive summary of the following text:\n\n{context}"
     )
-
-    # Create an LLMChain
+    
     chain = LLMChain(llm=llm, prompt=prompt_template)
-
-    # Run the chain
-    response = chain.run(context=context, question=query)
+    summary = chain.run(context=context)
 
     return {
-        "answer": response,
+        "summary": summary.strip(),
         "context": context
     }

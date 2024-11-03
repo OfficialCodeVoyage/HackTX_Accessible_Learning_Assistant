@@ -15,12 +15,12 @@ export default function Chat() {
         event.preventDefault();
         setIsLoading(true);
         try {
-            const response = await fetch("http://localhost:8000/ask", {
+            const response = await fetch("http://localhost:8000/query", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ question }),
+                body: JSON.stringify({ query: question }),
             });
             const data = await response.json();
             setAnswer(data.answer);
